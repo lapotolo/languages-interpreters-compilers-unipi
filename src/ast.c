@@ -170,6 +170,19 @@ struct expr *make_vect_access_op( struct expr *base
   return e;
 }
 
+struct expr *make_vect_update_op( struct expr *base
+                                , struct expr *index
+                                , struct expr *new_rhs)
+{
+  struct expr *e = malloc(sizeof(struct expr));
+
+  e->type = VECTOR_UPDATE_OP;
+  e->vect_update.base  = base;
+  e->vect_update.index = index;
+  e->vect_update.rhs   = new_rhs;
+
+  return e;
+}
 
 struct expr_vect *make_expr_vect( struct expr *curr
                                 , struct expr_vect *next)
@@ -254,6 +267,11 @@ void free_expr(struct expr *e) {
     free_expr(e->vect_access.index);
     break;
   
+  case VECTOR_UPDATE_OP:
+    free_expr(e->vect_update.base);
+    free_expr(e->vect_update.index);
+    free_expr(e->vect_update.rhs);
+    break;
   }
 
   free(e);
@@ -542,18 +560,28 @@ LLVMValueRef codegen_expr(
     return vector_base_address;
   }
 
-  case VECTOR_ACCESS_OP:
-  {
+  case VECTOR_ACCESS_OP: {
     LLVMValueRef vect_id = codegen_expr(e->vect_access.base, env, module, builder);
-    LLVMValueRef idxs[] = {
-      LLVMConstInt(LLVMInt32Type(), 0, 0), // First array in the pointer                                                                                                     
-      codegen_expr(e->vect_access.index, env, module, builder) // N-th element of the array                                                                                 
-    };
-    // Array type (e.g. int[])                                                                                                                                               
+    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_access.index, env, module, builder) };
+    // compute the type of the vector. Needed for LLVMBuildInBoundsGEP2
+    LLVMTypeRef vect_type = LLVMGetElementType(LLVMTypeOf(vect_id));
+    
+    // LLVMBuildInBoundsGEP2 requires the type of the LLVMArrayType. Using this one it is allowed to use any number of dimensions
+    LLVMValueRef offset = LLVMBuildInBoundsGEP2(builder, vect_type, vect_id, idxs, 2, "");
+    return LLVMBuildLoad(builder, offset, "");
+  }
+
+  case VECTOR_UPDATE_OP: {
+    LLVMValueRef vect_id = codegen_expr(e->vect_update.base, env, module, builder);
+    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_update.index, env, module, builder) };
+    
+    LLVMValueRef value = codegen_expr(e->vect_update.rhs, env, module, builder);
+
     LLVMTypeRef vect_type = LLVMGetElementType(LLVMTypeOf(vect_id));
     
     LLVMValueRef offset = LLVMBuildInBoundsGEP2(builder, vect_type, vect_id, idxs, 2, "");
-    return LLVMBuildLoad(builder, offset, "");
+
+    return LLVMBuildStore(builder, value, offset);
   }
 
   default:

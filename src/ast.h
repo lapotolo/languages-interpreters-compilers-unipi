@@ -15,6 +15,7 @@ enum expr_type {
   BIN_OP,
   VECTOR,
   VECTOR_ACCESS_OP,
+  VECTOR_UPDATE_OP
 };
 
 enum value_type {
@@ -83,6 +84,11 @@ struct expr {
       struct expr *index;
     } vect_access;
 
+    struct {
+      struct expr *base;
+      struct expr *index;
+      struct expr *rhs;
+    } vect_update;
 
   };
 };
@@ -106,6 +112,7 @@ struct expr *make_bin_op(struct expr *lhs, int op, struct expr *rhs);
 
 struct expr *make_vect(struct expr_vect *new_vect);
 struct expr *make_vect_access_op(struct expr *base, struct expr *index);
+struct expr *make_vect_update_op(struct expr *base, struct expr *index, struct expr *new_rhs);
 
 void free_expr(struct expr *e);
 

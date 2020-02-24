@@ -83,8 +83,9 @@ expr: VAL         { $$ = make_val($1); }
     | expr OR_SC expr     { $$ = make_bin_op($1, OR_SC , $3); }
     | expr OR expr        { $$ = make_bin_op($1, OR    , $3); }
 
-    | '[' vect_elem ']'    { $$ = make_vect($2); }
-    | expr '[' expr ']'    { $$ = make_vect_access_op($1, $3); }
+    | '[' vect_elem ']'                   { $$ = make_vect($2); }
+    | expr '[' expr ']'                   { $$ = make_vect_access_op($1, $3); }
+    | expr '[' expr ']' ASSIGN_OP expr    { $$ = make_vect_update_op($1, $3, $6); }
 
 
     | '(' expr ')'    { $$ = $2; }
