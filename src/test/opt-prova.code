@@ -1,0 +1,27 @@
+var x = 1 in
+var y = 2 in
+var z = 3 in
+x : y : z : []
+
+
+
+      | MAP_KW    '[' vect_elem ']'         { $$ = make_map($3); }
+      | FOLD_KW   '[' vect_elem ']'         { $$ = make_fold($3); }
+      | FILTER_KW '[' vect_elem ']'         { $$ = make_filter($3); }
+
+  case VECTOR_ASSIGN_OP: {
+    LLVMValueRef vect_ptr = codegen_expr(e->vect_assign.base, env, module, builder);
+    LLVMValueRef indices[] = {
+      LLVMConstInt(LLVMInt32Type(), 0, 0),
+      codegen_expr(e->vect_assign.index, env, module, builder)
+    };
+    LLVMValueRef value = codegen_expr(e->vect_assign.value, env, module, builder);
+
+    LLVMTypeRef ptr_type = LLVMTypeOf(vect_ptr);
+    LLVMTypeRef vect_type = LLVMGetElementType(ptr_type);
+    LLVMTypeRef elem_type = LLVMGetElementType(vect_type);
+    
+    LLVMValueRef elem_ptr = LLVMBuildInBoundsGEP2(builder, vect_type, vect_ptr, indices, 2, "");
+
+    return LLVMBuildStore(builder, value, elem_ptr);
+  }
