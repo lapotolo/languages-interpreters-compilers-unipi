@@ -31,7 +31,7 @@
 // VECT OPs
 %token CONS
 // EXPRESSION SEQUENCING
-%token SEQ_SEP
+%token SEQ_KW SEQ_E
 
 // DEFINE TOKEN TYPES
 %type <e> expr
@@ -45,7 +45,6 @@
 %right DO_KW
 %right ELSE_KW
 %right IN_KW
-
 
 %nonassoc ASSIGN_OP
 %nonassoc IDENTIFIER
@@ -104,8 +103,7 @@ expr: VAL         { $$ = make_val($1); }
 
     | expr CONS '[' vect_elem ']'         { $$ = make_vect(make_expr_vect($1, $4)); }
 
-
-    | '{'expr_sequence'}'     { $$ = make_seq($2); }
+    | SEQ_KW expr_sequence                { $$ = make_seq($2); }
 
     | '(' expr ')'    { $$ = $2; }
     | '\n' expr       { $$ = $2; }
@@ -119,10 +117,11 @@ vect_elem_continuation: ',' expr vect_elem_continuation    { $$ = make_expr_vect
                       | %empty                             { $$ = NULL; }
 
 expr_sequence : expr expr_seq_cont            { $$ = make_expr_vect($1, $2); }
-
-expr_seq_cont : SEQ_SEP expr expr_seq_cont    { $$ = make_expr_vect($2, $3); }
               | %empty                        { $$ = NULL; }
 
+expr_seq_cont : ';' expr expr_seq_cont    { $$ = make_expr_vect($2, $3); }
+              | '\n'                      { $$ = NULL; }
+              
 %%
 
 int main(void) 

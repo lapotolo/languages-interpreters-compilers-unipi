@@ -25,7 +25,10 @@ enum value_type {
   BOOLEAN,
 };
 
-struct expr_vect;
+struct expr_vect {
+  struct expr      *curr_expr;
+  struct expr_vect *next_expr;
+};
 
 struct expr {
   enum expr_type type;
@@ -80,12 +83,12 @@ struct expr {
 
     struct {
       struct expr *base;
-      struct expr *index;
+      struct expr *offset;
     } vect_access;
 
     struct {
       struct expr *base;
-      struct expr *index;
+      struct expr *offset;
       struct expr *rhs;
     } vect_update;
 
@@ -94,10 +97,7 @@ struct expr {
   };
 };
 
-struct expr_vect {
-  struct expr      *curr_expr;
-  struct expr_vect *next_expr;
-};
+
 
 struct expr *make_val(int value);
 struct expr *make_bool(int value);
@@ -113,10 +113,10 @@ struct expr *make_un_op(int op, struct expr *expr);
 struct expr *make_bin_op(struct expr *lhs, int op, struct expr *rhs);
 
 struct expr *make_vect(struct expr_vect *new_vect);
-struct expr *make_vect_access_op(struct expr *base, struct expr *index);
-struct expr *make_vect_update_op(struct expr *base, struct expr *index, struct expr *new_rhs);
+struct expr *make_vect_access_op(struct expr *base, struct expr *offset);
+struct expr *make_vect_update_op(struct expr *base, struct expr *offset, struct expr *new_rhs);
 
-struct expr *make_seq(struct expr_vect *expr_seq);
+struct expr *make_seq(struct expr_vect *new_seq);
 
 struct expr_vect *make_expr_vect(struct expr *curr, struct expr_vect *next);
 

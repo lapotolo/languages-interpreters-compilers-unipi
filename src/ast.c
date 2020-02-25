@@ -169,37 +169,37 @@ struct expr *make_vect(struct expr_vect *vect)
 }
 
 struct expr *make_vect_access_op( struct expr *base
-                                , struct expr *index)
+                                , struct expr *offset)
 {
   struct expr *e = malloc(sizeof(struct expr));
 
   e->type = VECTOR_ACCESS_OP;
   e->vect_access.base = base;
-  e->vect_access.index = index;
+  e->vect_access.offset = offset;
 
   return e;
 }
 
 struct expr *make_vect_update_op( struct expr *base
-                                , struct expr *index
+                                , struct expr *offset
                                 , struct expr *new_rhs)
 {
   struct expr *e = malloc(sizeof(struct expr));
 
   e->type = VECTOR_UPDATE_OP;
   e->vect_update.base  = base;
-  e->vect_update.index = index;
+  e->vect_update.offset = offset;
   e->vect_update.rhs   = new_rhs;
 
   return e;
 }
 
-struct expr *make_seq(struct expr_vect *expr_seq)
+struct expr *make_seq(struct expr_vect *new_seq)
 {
   struct expr *e = malloc(sizeof(struct expr));
 
   e->type = SEQ;
-  e->vect = expr_seq;
+  e->vect = new_seq;
 
   return e;
 }
@@ -207,9 +207,8 @@ struct expr *make_seq(struct expr_vect *expr_seq)
 void free_vect(struct expr_vect *ve)
 {
   free_expr(ve->curr_expr);
-  if(ve->next_expr != NULL) {
+  if(ve->next_expr != NULL)
     free_vect(ve->next_expr);
-  }
   free(ve);
 }
 
@@ -275,19 +274,19 @@ void free_expr(struct expr *e) {
 
     case VECTOR_ACCESS_OP:
       free_expr(e->vect_access.base);
-      free_expr(e->vect_access.index);
+      free_expr(e->vect_access.offset);
       break;
   
     case VECTOR_UPDATE_OP:
       free_expr(e->vect_update.base);
-      free_expr(e->vect_update.index);
+      free_expr(e->vect_update.offset);
       free_expr(e->vect_update.rhs);
       break;  
   }
-
   free(e);
 }
 
+// auxiliary function to count the number of expressions in a list
 int vect_len(struct expr_vect *vect) {
   int len = 0;
   while(vect != NULL) {
@@ -361,16 +360,16 @@ LLVMValueRef codegen_expr(
     return LLVMBuildStore(builder, expr, pointer);
   }
 
-  case IDENT: { // CHECK
+  case IDENT: {
     // evaluate the ID in the given environment
-    LLVMValueRef val = resolve(env, e->ident);
-    LLVMTypeRef val_type  = LLVMTypeOf(val);
-    LLVMTypeKind val_kind = LLVMGetTypeKind(val_type);
+    LLVMValueRef val       = resolve(env, e->ident);
+    LLVMTypeRef  val_type  = LLVMTypeOf(val);
+    LLVMTypeKind val_kind  = LLVMGetTypeKind(val_type);
     
     // act on val depending on its kind: literal or pointer
     if (val_kind == LLVMPointerTypeKind) {
 
-      LLVMTypeRef elem_type = LLVMGetElementType(val_type);
+      LLVMTypeRef  elem_type = LLVMGetElementType(val_type);
       LLVMTypeKind elem_kind = LLVMGetTypeKind(elem_type);
       // in the case of val being a LLVMPointerTypeKind, evaluate it according to its kind ("simple" or LLVMArrayTypeKind)    
       if(elem_kind == LLVMArrayTypeKind) {
@@ -454,28 +453,30 @@ LLVMValueRef codegen_expr(
       LLVMBasicBlockRef cont_bb       = LLVMAppendBasicBlock(f, "cont");
 
       LLVMValueRef left_val = codegen_expr(e->binop.lhs, env, module, builder);
-      // generate a branching point with condition left_val
+      // generate a branching point with condition left_val as condition and
+      // left_true and left_false as possible successors blocks
       LLVMBuildCondBr(builder, left_val, left_true_bb, left_false_bb);
 
-      // if left_val true then generate code for right_val
+      // in the case left is true it is left to evaluate the right hand side
       LLVMPositionBuilderAtEnd(builder, left_true_bb);
       LLVMValueRef right_val = codegen_expr(e->binop.rhs, env, module, builder);
       LLVMBuildBr(builder, cont_bb);
-
-      // else left_val is false and we can skip the code generation step for rhs
-      LLVMPositionBuilderAtEnd(builder, left_false_bb);
-      LLVMBuildBr(builder, cont_bb);
-      
-      // create intermediate blocks
       left_true_bb = LLVMGetInsertBlock(builder);
+
+      // in the case left is flase we can skip the codegeneration for the right hand side
+      LLVMPositionBuilderAtEnd(builder, left_false_bb);
+      // skip code generation for right hand side of the expression
+      LLVMBuildBr(builder, cont_bb);
       left_false_bb = LLVMGetInsertBlock(builder);
-    
+      
       LLVMPositionBuilderAtEnd(builder, cont_bb);
 
-      // create a phi block and link blocks
+      // create a phi block to let the two previous block sink in a phi block
       LLVMValueRef phi = LLVMBuildPhi(builder, LLVMInt1Type(), "");
+
+      // set edges to the newly created block
       LLVMValueRef partial_results[] = {left_val, right_val};
-      LLVMBasicBlockRef blocks[] = {left_true_bb, left_false_bb};
+      LLVMBasicBlockRef blocks[]     = {left_true_bb, left_false_bb};
       LLVMAddIncoming(phi, partial_results, blocks, 2);
       return phi;
     }
@@ -483,29 +484,25 @@ LLVMValueRef codegen_expr(
     else if(e->binop.op == OR_SC)
     {
       LLVMValueRef f = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
-      LLVMBasicBlockRef left_true_bb = LLVMAppendBasicBlock(f, "left_true");
+      LLVMBasicBlockRef left_true_bb  = LLVMAppendBasicBlock(f, "left_true");
       LLVMBasicBlockRef left_false_bb = LLVMAppendBasicBlock(f, "left_false");
-      LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(f, "cont");
+      LLVMBasicBlockRef cont_bb       = LLVMAppendBasicBlock(f, "cont");
 
       LLVMValueRef left_val = codegen_expr(e->binop.lhs, env, module, builder);
       LLVMBuildCondBr(builder, left_val, left_true_bb, left_false_bb);
-
-      // If left_val is true, skip rhs codegen
-      LLVMPositionBuilderAtEnd(builder, left_true_bb);
-      LLVMBuildBr(builder, cont_bb);
-      
-      // else codegen for rhs
+  
       LLVMPositionBuilderAtEnd(builder, left_false_bb);
       LLVMValueRef right_val = codegen_expr(e->binop.rhs, env, module, builder);
       LLVMBuildBr(builder, cont_bb);
-      
-      // create intermediate blocks
-      left_true_bb  = LLVMGetInsertBlock(builder);
       left_false_bb = LLVMGetInsertBlock(builder);
+
+      LLVMPositionBuilderAtEnd(builder, left_true_bb);
+      // skip codegen
+      LLVMBuildBr(builder, cont_bb);
+      left_true_bb = LLVMGetInsertBlock(builder);
   
       LLVMPositionBuilderAtEnd(builder, cont_bb);
 
-      // create a phi block and link blocks
       LLVMValueRef phi = LLVMBuildPhi(builder, LLVMInt1Type(), "");
       LLVMValueRef partial_results[] = {left_val, right_val};
       LLVMBasicBlockRef blocks[] = {left_true_bb, left_false_bb};
@@ -513,7 +510,7 @@ LLVMValueRef codegen_expr(
 
       return phi;
     }
-    else 
+    else // "standard" binary operation
     {
       LLVMValueRef lhs = codegen_expr(e->binop.lhs, env, module, builder);
       LLVMValueRef rhs = codegen_expr(e->binop.rhs, env, module, builder);
@@ -578,8 +575,8 @@ LLVMValueRef codegen_expr(
 
   case VECTOR_ACCESS_OP: {
     LLVMValueRef vect_id = codegen_expr(e->vect_access.base, env, module, builder);
-    // idxs is needed to hold the result of the evaluation of expressions yielding an index to access the given vector
-    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_access.index, env, module, builder) };
+    // idxs is needed to hold the result of the evaluation of expressions yielding an offset to access the given vector
+    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_access.offset, env, module, builder) };
     // compute the type of the vector. Needed for LLVMBuildInBoundsGEP2
     LLVMTypeRef vect_type = LLVMGetElementType(LLVMTypeOf(vect_id));
     
@@ -589,27 +586,29 @@ LLVMValueRef codegen_expr(
   }
 
   case VECTOR_UPDATE_OP: {
+    // evaluate the base address in the environment
     LLVMValueRef vect_id = codegen_expr(e->vect_update.base, env, module, builder);
-    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_update.index, env, module, builder) };
+    // evaluate the expression to get the offset
+    LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_update.offset, env, module, builder) };
     
-    LLVMValueRef value = codegen_expr(e->vect_update.rhs, env, module, builder);
+    LLVMValueRef rhs = codegen_expr(e->vect_update.rhs, env, module, builder);
 
     LLVMTypeRef vect_type = LLVMGetElementType(LLVMTypeOf(vect_id));
     
     LLVMValueRef offset = LLVMBuildInBoundsGEP2(builder, vect_type, vect_id, idxs, 2, "");
 
-    return LLVMBuildStore(builder, value, offset);
+    return LLVMBuildStore(builder, rhs, offset);
   }
 
   case SEQ: { // returns the last expression of the sequence
-    printf("IN CODEGEN SEQ\n");
     LLVMValueRef ret;
     struct expr_vect *ve = e->vect;
-    while (ve->curr_expr != NULL)
-    {
+    do {
       ret = codegen_expr(ve->curr_expr, env, module, builder);
       ve = ve->next_expr;
-    } 
+    } while(ve != NULL);
+
+    return ret;
   }
   
   default:
@@ -640,8 +639,8 @@ void jit_eval(struct expr *expr)
   // NEW
   // Setup optimizations using a pass manager
   LLVMPassManagerRef pass_manager = LLVMCreateFunctionPassManagerForModule(module);
-  //LLVMAddPromoteMemoryToRegisterPass(pass_manager);
-  LLVMAddInstructionCombiningPass(pass_manager);
+  LLVMAddPromoteMemoryToRegisterPass(pass_manager);
+  //LLVMAddInstructionCombiningPass(pass_manager);
   LLVMInitializeFunctionPassManager(pass_manager);;
   
   //LLVMAddReassociatePass(pass_manager);
