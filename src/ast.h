@@ -15,7 +15,8 @@ enum expr_type {
   BIN_OP,
   VECTOR,
   VECTOR_ACCESS_OP,
-  VECTOR_UPDATE_OP
+  VECTOR_UPDATE_OP,
+  SEQ,
 };
 
 enum value_type {
@@ -77,8 +78,6 @@ struct expr {
       int op;
     } binop;
 
-    struct expr_vect *vect;
-    
     struct {
       struct expr *base;
       struct expr *index;
@@ -89,6 +88,8 @@ struct expr {
       struct expr *index;
       struct expr *rhs;
     } vect_update;
+
+    struct expr_vect *vect;
 
   };
 };
@@ -107,6 +108,7 @@ struct expr *make_var(char *ident, struct expr *expr, struct expr *body);
 struct expr *make_assign(char *ident, struct expr *expr);
 struct expr *make_if(struct expr *cond, struct expr *e_true, struct expr *e_false);
 struct expr *make_while(struct expr *cond, struct expr *body);
+
 struct expr *make_un_op(int op, struct expr *expr);
 struct expr *make_bin_op(struct expr *lhs, int op, struct expr *rhs);
 
@@ -114,9 +116,12 @@ struct expr *make_vect(struct expr_vect *new_vect);
 struct expr *make_vect_access_op(struct expr *base, struct expr *index);
 struct expr *make_vect_update_op(struct expr *base, struct expr *index, struct expr *new_rhs);
 
-void free_expr(struct expr *e);
+struct expr *make_seq(struct expr_vect *expr_seq);
 
 struct expr_vect *make_expr_vect(struct expr *curr, struct expr_vect *next);
+
+void free_expr(struct expr *e);
+
 
 LLVMValueRef codegen_expr(
   struct expr *e,

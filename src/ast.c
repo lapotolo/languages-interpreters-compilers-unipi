@@ -148,10 +148,20 @@ struct expr *make_bin_op(struct expr *lhs
 
 // -----------------------------------------------------------
 
+struct expr_vect *make_expr_vect( struct expr *curr
+                                , struct expr_vect *next)
+{
+  struct expr_vect *ve = malloc(sizeof(struct expr_vect));
+
+  ve->curr_expr = curr;
+  ve->next_expr = next;
+
+  return ve;
+}
+
 struct expr *make_vect(struct expr_vect *vect)
 {
   struct expr *e = malloc(sizeof(struct expr));
-
   e->type = VECTOR;
   e->vect = vect;
 
@@ -184,15 +194,14 @@ struct expr *make_vect_update_op( struct expr *base
   return e;
 }
 
-struct expr_vect *make_expr_vect( struct expr *curr
-                                , struct expr_vect *next)
+struct expr *make_seq(struct expr_vect *expr_seq)
 {
-  struct expr_vect *ve = malloc(sizeof(struct expr_vect));
+  struct expr *e = malloc(sizeof(struct expr));
 
-  ve->curr_expr = curr;
-  ve->next_expr = next;
+  e->type = SEQ;
+  e->vect = expr_seq;
 
-  return ve;
+  return e;
 }
 
 void free_vect(struct expr_vect *ve)
@@ -207,71 +216,73 @@ void free_vect(struct expr_vect *ve)
 // -----------------------------------------------------------
 
 void free_expr(struct expr *e) {
-  switch (e->type) {
-  case LITERAL:
-  case LIT_BOOL:
-    break;
+  switch (e->type)
+  {
+    case LITERAL:
+    case LIT_BOOL:
+      break;
 
-  case IDENT:
-    free(e->ident);
-    break;
+    case IDENT:
+      free(e->ident);
+      break;
 
-  case CALL:
-    free(e->let.ident);
-    free_expr(e->let.expr);
-    break;
+    case CALL:
+      free(e->let.ident);
+      free_expr(e->let.expr);
+      break;
 
-  case LET:
-    free(e->let.ident);
-    free_expr(e->let.expr);
-    free_expr(e->let.body);
-    break;
+    case LET:
+      free(e->let.ident);
+      free_expr(e->let.expr);
+      free_expr(e->let.body);
+      break;
 
-  case VAR:
-    free(e->var.ident);
-    free_expr(e->var.expr);
-    free_expr(e->var.body);
-    break;
+    case VAR:
+      free(e->var.ident);
+      free_expr(e->var.expr);
+      free_expr(e->var.body);
+      break;
 
-  case ASSIGN:
-    free(e->assign.ident);
-    free_expr(e->assign.expr);
-    break;
+    case ASSIGN:
+      free(e->assign.ident);
+      free_expr(e->assign.expr);
+      break;
 
-  case IF:
-    free_expr(e->if_expr.cond);
-    free_expr(e->if_expr.e_true);
-    free_expr(e->if_expr.e_false);
-    break;
+    case IF:
+      free_expr(e->if_expr.cond);
+      free_expr(e->if_expr.e_true);
+      free_expr(e->if_expr.e_false);
+      break;
 
-  case WHILE:
-    free_expr(e->while_expr.cond);
-    free_expr(e->while_expr.body);
-    break;
+    case WHILE:
+      free_expr(e->while_expr.cond);
+      free_expr(e->while_expr.body);
+      break;
+    
+    case UN_OP:
+      free_expr(e->unop.expr);
+      break;
 
-  case UN_OP:
-    free_expr(e->unop.expr);
-    break;
+    case BIN_OP:
+      free_expr(e->binop.lhs);
+      free_expr(e->binop.rhs);
+      break;
 
-  case BIN_OP:
-    free_expr(e->binop.lhs);
-    free_expr(e->binop.rhs);
-    break;
+    case VECTOR:
+    case SEQ:
+      free_vect(e->vect);
+      break;
 
-  case VECTOR:
-    free_vect(e->vect);
-    break;
-
-  case VECTOR_ACCESS_OP:
-    free_expr(e->vect_access.base);
-    free_expr(e->vect_access.index);
-    break;
+    case VECTOR_ACCESS_OP:
+      free_expr(e->vect_access.base);
+      free_expr(e->vect_access.index);
+      break;
   
-  case VECTOR_UPDATE_OP:
-    free_expr(e->vect_update.base);
-    free_expr(e->vect_update.index);
-    free_expr(e->vect_update.rhs);
-    break;
+    case VECTOR_UPDATE_OP:
+      free_expr(e->vect_update.base);
+      free_expr(e->vect_update.index);
+      free_expr(e->vect_update.rhs);
+      break;  
   }
 
   free(e);
@@ -343,7 +354,9 @@ LLVMValueRef codegen_expr(
   }
 
   case ASSIGN: {
+    // first evaluate the expression on rhs so that it is not valid the pointer is not resolved in the environment needless
     LLVMValueRef expr = codegen_expr(e->var.expr, env, module, builder);
+    // 
     LLVMValueRef pointer = resolve(env, e->assign.ident);
     return LLVMBuildStore(builder, expr, pointer);
   }
@@ -351,7 +364,7 @@ LLVMValueRef codegen_expr(
   case IDENT: { // CHECK
     // evaluate the ID in the given environment
     LLVMValueRef val = resolve(env, e->ident);
-    LLVMTypeRef val_type = LLVMTypeOf(val);
+    LLVMTypeRef val_type  = LLVMTypeOf(val);
     LLVMTypeKind val_kind = LLVMGetTypeKind(val_type);
     
     // act on val depending on its kind: literal or pointer
@@ -396,7 +409,8 @@ LLVMValueRef codegen_expr(
 
     if (LLVMGetTypeKind(type) == LLVMVoidTypeKind) {
       return then_val; // void value, just return any expr of the appropriate type
-    } else {
+    } 
+    else {
       LLVMValueRef phi = LLVMBuildPhi(builder, type, "");
       LLVMValueRef values[] = {then_val, else_val};
       LLVMBasicBlockRef blocks[] = {then_bb, else_bb};
@@ -437,7 +451,7 @@ LLVMValueRef codegen_expr(
       LLVMValueRef f = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
       LLVMBasicBlockRef left_true_bb  = LLVMAppendBasicBlock(f, "left_true");
       LLVMBasicBlockRef left_false_bb = LLVMAppendBasicBlock(f, "left_false");
-      LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(f, "cont");
+      LLVMBasicBlockRef cont_bb       = LLVMAppendBasicBlock(f, "cont");
 
       LLVMValueRef left_val = codegen_expr(e->binop.lhs, env, module, builder);
       // generate a branching point with condition left_val
@@ -538,6 +552,8 @@ LLVMValueRef codegen_expr(
       ++i;
     }
 
+    // Now we evaluated every expression in the vector. It is left to store each results in memory
+
     // compute the type of the vector of expressions 
     // implementation choice: the type must be the same for every expression in the list
     LLVMTypeRef element_type = LLVMTypeOf(expressions[0]);
@@ -562,6 +578,7 @@ LLVMValueRef codegen_expr(
 
   case VECTOR_ACCESS_OP: {
     LLVMValueRef vect_id = codegen_expr(e->vect_access.base, env, module, builder);
+    // idxs is needed to hold the result of the evaluation of expressions yielding an index to access the given vector
     LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), 0, 0), codegen_expr(e->vect_access.index, env, module, builder) };
     // compute the type of the vector. Needed for LLVMBuildInBoundsGEP2
     LLVMTypeRef vect_type = LLVMGetElementType(LLVMTypeOf(vect_id));
@@ -584,6 +601,17 @@ LLVMValueRef codegen_expr(
     return LLVMBuildStore(builder, value, offset);
   }
 
+  case SEQ: { // returns the last expression of the sequence
+    printf("IN CODEGEN SEQ\n");
+    LLVMValueRef ret;
+    struct expr_vect *ve = e->vect;
+    while (ve->curr_expr != NULL)
+    {
+      ret = codegen_expr(ve->curr_expr, env, module, builder);
+      ve = ve->next_expr;
+    } 
+  }
+  
   default:
     return NULL;
   }
@@ -612,7 +640,7 @@ void jit_eval(struct expr *expr)
   // NEW
   // Setup optimizations using a pass manager
   LLVMPassManagerRef pass_manager = LLVMCreateFunctionPassManagerForModule(module);
-  LLVMAddPromoteMemoryToRegisterPass(pass_manager);
+  //LLVMAddPromoteMemoryToRegisterPass(pass_manager);
   LLVMAddInstructionCombiningPass(pass_manager);
   LLVMInitializeFunctionPassManager(pass_manager);;
   
@@ -635,6 +663,7 @@ void jit_eval(struct expr *expr)
   LLVMTypeRef bad_f_type = LLVMFunctionType(LLVMVoidType(), NULL, 0, 0);
 
   LLVMValueRef typing_f = LLVMAddFunction(module, "typing_f", bad_f_type);
+  
   LLVMBasicBlockRef typing_entry_bb = LLVMAppendBasicBlock(typing_f, "entry");
   LLVMPositionBuilderAtEnd(builder, typing_entry_bb);
   LLVMValueRef typing_ret = codegen_expr(expr, NULL, module, builder);
@@ -656,15 +685,19 @@ void jit_eval(struct expr *expr)
     LLVMBuildRet(builder, ret);
   }
 
+  fprintf(stderr, "\ngenerating code...\n");
   LLVMDumpValue(f);
 
   LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
 
-  // NEW
-  // fprintf(stderr, "optimizing...\n");
-  // LLVMRunFunctionPassManager(pass_manager, f);
+  // OPTIMISATION PASS
+  fprintf(stderr, "\ngenerating optimised code...\n");
+  LLVMRunFunctionPassManager(pass_manager, f);
+  LLVMDumpValue(f);
 
-  fprintf(stderr, "running...\n");
+
+  // EXECUTE LLVM GENERATED CODE  
+  fprintf(stderr, "\nrunning...\n");
   LLVMGenericValueRef result = LLVMRunFunction(engine, f, 0, NULL);
 
   if (LLVMGetTypeKind(type) == LLVMVoidTypeKind) {

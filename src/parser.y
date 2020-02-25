@@ -15,25 +15,40 @@
   struct expr_vect* e_ve;
 }
 
-%token <ident> IDENTIFIER
+// DEFINE ALLOWED TOKENS
+// LEAVES
 %token <lit_value> VAL
-%token LET_KW IN_KW VAR_KW
-%token IF_KW THEN_KW ELSE_KW
-%token WHILE_KW DO_KW
+%token <ident> IDENTIFIER
 %token LIT_TRUE LIT_FALSE
+// ENVIRONMENT
+%token LET_KW IN_KW VAR_KW
+// BRANCH
+%token IF_KW THEN_KW ELSE_KW
+// LOOP
+%token WHILE_KW DO_KW
+// BOOLEAN BINOP
 %token AND_SC AND OR_SC OR
+// VECT OPs
+%token CONS
+// EXPRESSION SEQUENCING
+%token SEQ_SEP
 
+// DEFINE TOKEN TYPES
 %type <e> expr
 %type <e_ve> vect_elem
-%type <e_ve> vect_elem_cont
+%type <e_ve> vect_elem_continuation
+%type <e_ve> expr_sequence
+%type <e_ve> expr_seq_cont
 
+
+// PRECEDENCES
 %right DO_KW
 %right ELSE_KW
 %right IN_KW
-%nonassoc '['
+
+
 %nonassoc ASSIGN_OP
 %nonassoc IDENTIFIER
-%nonassoc '('
 %left AND_SC AND OR_SC OR
 %nonassoc '<' '>' LE GE '=' NE
 %left '+' '-'
@@ -87,15 +102,26 @@ expr: VAL         { $$ = make_val($1); }
     | expr '[' expr ']'                   { $$ = make_vect_access_op($1, $3); }
     | expr '[' expr ']' ASSIGN_OP expr    { $$ = make_vect_update_op($1, $3, $6); }
 
+    | expr CONS '[' vect_elem ']'         { $$ = make_vect(make_expr_vect($1, $4)); }
+
+
+    | '{'expr_sequence'}'     { $$ = make_seq($2); }
 
     | '(' expr ')'    { $$ = $2; }
     | '\n' expr       { $$ = $2; }
 
 
 
-vect_elem: expr vect_elem_cont             { $$ = make_expr_vect($1, $2); }
-vect_elem_cont: ',' expr vect_elem_cont    { $$ = make_expr_vect($2, $3); }
-              | %empty                     { $$ = NULL; }
+vect_elem: expr vect_elem_continuation    { $$ = make_expr_vect($1, $2); }
+         | %empty                         { $$ = NULL; }
+
+vect_elem_continuation: ',' expr vect_elem_continuation    { $$ = make_expr_vect($2, $3); }
+                      | %empty                             { $$ = NULL; }
+
+expr_sequence : expr expr_seq_cont            { $$ = make_expr_vect($1, $2); }
+
+expr_seq_cont : SEQ_SEP expr expr_seq_cont    { $$ = make_expr_vect($2, $3); }
+              | %empty                        { $$ = NULL; }
 
 %%
 
