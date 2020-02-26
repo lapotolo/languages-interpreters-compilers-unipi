@@ -17,6 +17,8 @@ enum expr_type {
   VECTOR_ACCESS_OP,
   VECTOR_UPDATE_OP,
   SEQ,
+  SUGARED_VECTOR_BUILD_OP,
+
 };
 
 enum value_type {
@@ -92,8 +94,12 @@ struct expr {
       struct expr *rhs;
     } vect_update;
 
-    struct expr_vect *vect;
+    struct {
+      struct expr_vect *sample;
+      struct expr      *len;
+    } vect_build;
 
+    struct expr_vect *vect;
   };
 };
 
@@ -117,6 +123,9 @@ struct expr *make_vect_access_op(struct expr *base, struct expr *offset);
 struct expr *make_vect_update_op(struct expr *base, struct expr *offset, struct expr *new_rhs);
 
 struct expr *make_seq(struct expr_vect *new_seq);
+
+struct expr *make_vect_sugared(struct expr_vect *new_vect, struct expr *len);
+
 
 struct expr_vect *make_expr_vect(struct expr *curr, struct expr_vect *next);
 

@@ -1,0 +1,11 @@
+let n = 10 in
+var i = 2 in
+var x = [0] times n in
+  seq 
+    x[0] := 0;
+    x[1] := 1;
+    while i < n do
+      seq
+        x[i] := x[i-1] + x[i-2];
+        i := i+1.;
+    x[9].

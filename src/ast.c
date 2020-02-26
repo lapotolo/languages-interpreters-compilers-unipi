@@ -204,6 +204,18 @@ struct expr *make_seq(struct expr_vect *new_seq)
   return e;
 }
 
+struct expr *make_vect_sugared( struct expr_vect *new_vect
+                              , struct expr      *len)
+{
+  struct expr *e = malloc(sizeof(struct expr));
+
+  e->type              = SUGARED_VECTOR_BUILD_OP;
+  e->vect_build.sample = new_vect;
+  e->vect_build.len    = len;
+  return e;  
+}
+
+
 void free_vect(struct expr_vect *ve)
 {
   free_expr(ve->curr_expr);
@@ -281,7 +293,12 @@ void free_expr(struct expr *e) {
       free_expr(e->vect_update.base);
       free_expr(e->vect_update.offset);
       free_expr(e->vect_update.rhs);
-      break;  
+      break;
+    
+    case SUGARED_VECTOR_BUILD_OP:
+      free_vect(e->vect_build.sample);
+      free_expr(e->vect_build.len);
+      break;
   }
   free(e);
 }
@@ -558,7 +575,6 @@ LLVMValueRef codegen_expr(
 
     // emit LLVM IR code to allocate space for this type of vector and get the base address of it
     LLVMValueRef vector_base_address = LLVMBuildAlloca(builder, vector_type, "");
-
     // put each vector elements in its place computing offsets starting from vector_base_address
     i = 0;
     while(i < size) 
@@ -610,6 +626,56 @@ LLVMValueRef codegen_expr(
 
     return ret;
   }
+
+  case SUGARED_VECTOR_BUILD_OP: {
+    struct expr_vect *ve_head = e->vect_build.sample;
+    struct expr_vect *ve_last = e->vect_build.sample;
+    int i = 0;
+
+    int sample_vect_size = vect_len(ve_head);
+    LLVMValueRef val = codegen_expr(e->vect_build.len, env, module, builder);
+
+    unsigned new_size = sample_vect_size * LLVMConstIntGetZExtValue(val);
+
+    // create a C array to hold the result of the evaluation of of every expr in the list of expressions ve
+    LLVMValueRef* expressions = malloc(sizeof(LLVMValueRef) * new_size);
+
+    // make the given expr_vect circular linking the the last with the first element
+    while(ve_last->next_expr != NULL) {
+      ve_last = ve_last->next_expr;
+    }
+    ve_last->next_expr = ve_head;
+
+    // generate code for every expression in the vector
+    while(i < new_size) {
+      expressions[i] = codegen_expr(ve_head->curr_expr, env, module, builder);
+      ve_head = ve_head->next_expr;
+      ++i;
+    }
+    // here it is needed to undo the circularity because jit_eval performs two codegen_expr and
+    // and if this is not done then the second call remains stuck in the call vect_len
+    ve_last->next_expr = NULL;
+
+    LLVMTypeRef element_type = LLVMTypeOf(expressions[0]);
+    LLVMTypeRef vector_type  = LLVMArrayType(element_type, new_size);
+
+    // emit LLVM IR code to allocate space for this type of vector and get the base address of it
+    LLVMValueRef vector_base_address = LLVMBuildAlloca(builder, vector_type, "");
+
+    // put each vector elements in its place computing offsets starting from vector_base_address
+    i = 0;
+
+    while(i < new_size) 
+    {
+      LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), i, 0) };
+      // compute the offset where the i-th value has to be stored
+      LLVMValueRef offset = LLVMBuildInBoundsGEP2(builder, element_type, vector_base_address, idxs, 1, "");
+      // store element i at address: vector_base_address + offset
+      LLVMBuildStore(builder, expressions[i], offset);
+      ++i;
+    }
+      return vector_base_address;
+  }
   
   default:
     return NULL;
@@ -647,12 +713,12 @@ void jit_eval(struct expr *expr)
   //LLVMAddGVNPass(pass_manager);
   //LLVMAddCFGSimplificationPass(pass_manager);
   
-
   char *error;
   if (LLVMCreateExecutionEngineForModule(&engine, module, &error)) {
     fprintf(stderr, "%s\n", error);
     return;
   }
+
 
   // LLVM can only emit instructions in basic blocks
   //   basic blocks are always part of a function
@@ -670,12 +736,14 @@ void jit_eval(struct expr *expr)
   LLVMTypeRef type = LLVMTypeOf(typing_ret);
   LLVMDeleteFunction(typing_f);
 
+
   // emit expression as function body
   LLVMTypeRef actual_f_type = LLVMFunctionType(type, NULL, 0, 0);
   LLVMValueRef f = LLVMAddFunction(module, "f", actual_f_type);
   LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(f, "entry");
   LLVMPositionBuilderAtEnd(builder, entry_bb);
   LLVMValueRef ret = codegen_expr(expr, NULL, module, builder);
+
 
   // return the result and terminate the function
   if (LLVMGetTypeKind(type) == LLVMVoidTypeKind) {

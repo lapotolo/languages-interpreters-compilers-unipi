@@ -31,7 +31,9 @@
 // VECT OPs
 %token CONS
 // EXPRESSION SEQUENCING
-%token SEQ_KW SEQ_E
+%token SEQ_KW
+// SUGARED VECTOR CONSTRUCTION
+%token TIMES_KW
 
 // DEFINE TOKEN TYPES
 %type <e> expr
@@ -49,16 +51,17 @@
 %nonassoc ASSIGN_OP
 %nonassoc IDENTIFIER
 %left AND_SC AND OR_SC OR
-%nonassoc '<' '>' LE GE '=' NE
+%nonassoc '<' '>' LE GE '=' NE TIMES_KW
 %left '+' '-'
 %left '*' '/'
 %nonassoc '!'
+
 
 %%
 
 program: program expr '\n' 
          {
-           jit_eval($2);
+           jit_eval($2); //expr
            free_expr($2);
          }
        | %empty
@@ -97,10 +100,11 @@ expr: VAL         { $$ = make_val($1); }
     | expr OR_SC expr     { $$ = make_bin_op($1, OR_SC , $3); }
     | expr OR expr        { $$ = make_bin_op($1, OR    , $3); }
 
-    | '[' vect_elem ']'                   { $$ = make_vect($2); }
+    | '[' vect_elem ']'                     { $$ = make_vect($2); }
+    | '[' vect_elem ']' TIMES_KW expr       { $$ = make_vect_sugared($2, $5); }        
+
     | expr '[' expr ']'                   { $$ = make_vect_access_op($1, $3); }
     | expr '[' expr ']' ASSIGN_OP expr    { $$ = make_vect_update_op($1, $3, $6); }
-
 
     | expr CONS '[' vect_elem ']'         { $$ = make_vect(make_expr_vect($1, $4)); }
 
