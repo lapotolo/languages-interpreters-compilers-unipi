@@ -1,0 +1,8 @@
+var x = [0,1,0,0,0,0,0,0,0,0] in
+var i = 2 in
+seq
+  while (i < 10) do
+    seq
+      x[i] := x[i-1] + x[i-2];
+      i := i+1.;
+  x[i-1].

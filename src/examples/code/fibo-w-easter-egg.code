@@ -1,0 +1,13 @@
+var fibo = 0 in
+seq
+  var x = [0,0,0,0,0,0,0,0,0,0] in
+  var i = 2 in
+  seq
+    x[0] := 0;
+    x[1] := 1;
+    while (i < 10) do
+      seq
+        x[i] := x[i-1] + x[i-2];
+        i := i+1.;
+    fibo := x[i-1].;
+  let the_answer = 42 in fibo.

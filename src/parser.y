@@ -101,6 +101,7 @@ expr: VAL         { $$ = make_val($1); }
     | expr '[' expr ']'                   { $$ = make_vect_access_op($1, $3); }
     | expr '[' expr ']' ASSIGN_OP expr    { $$ = make_vect_update_op($1, $3, $6); }
 
+
     | expr CONS '[' vect_elem ']'         { $$ = make_vect(make_expr_vect($1, $4)); }
 
     | SEQ_KW expr_sequence                { $$ = make_seq($2); }
@@ -116,12 +117,12 @@ vect_elem: expr vect_elem_continuation    { $$ = make_expr_vect($1, $2); }
 vect_elem_continuation: ',' expr vect_elem_continuation    { $$ = make_expr_vect($2, $3); }
                       | %empty                             { $$ = NULL; }
 
-expr_sequence : expr expr_seq_cont            { $$ = make_expr_vect($1, $2); }
-              | %empty                        { $$ = NULL; }
+expr_sequence : expr expr_seq_cont        { $$ = make_expr_vect($1, $2); }
 
 expr_seq_cont : ';' expr expr_seq_cont    { $$ = make_expr_vect($2, $3); }
-              | '\n'                      { $$ = NULL; }
+              | '.'                       { $$ = NULL; }
               
+
 %%
 
 int main(void) 
