@@ -1,8 +1,0 @@
-var i = 10 in       
-  while (i > 0) do
-    seq
-      var y = [i,i+2,i+3] in 
-      seq
-        y[0] + i;
-        y[2] := i+1;
-      i := i-1

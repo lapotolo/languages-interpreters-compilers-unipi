@@ -498,7 +498,7 @@ LLVMValueRef codegen_expr(
       return phi;
     }
     // the idea is to not generate code for righthand side if lefthand side is false
-    else if(e->binop.op == OR_SC)
+      else if(e->binop.op == OR_SC)
     {
       LLVMValueRef f = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
       LLVMBasicBlockRef left_true_bb  = LLVMAppendBasicBlock(f, "left_true");
@@ -527,6 +527,53 @@ LLVMValueRef codegen_expr(
 
       return phi;
     }
+    else if(e->binop.op == CONCAT_KW)
+    {
+      LLVMValueRef lhs = codegen_expr(e->binop.lhs, env, module, builder);
+      LLVMValueRef rhs = codegen_expr(e->binop.rhs, env, module, builder);
+
+      LLVMTypeRef array_type_lhs = LLVMGetElementType(LLVMTypeOf(lhs));
+      unsigned size_lhs = LLVMGetArrayLength(array_type_lhs);
+
+      LLVMTypeRef array_type_rhs = LLVMGetElementType(LLVMTypeOf(rhs));
+      unsigned size_rhs = LLVMGetArrayLength(array_type_rhs);
+
+      unsigned conc_size = size_lhs + size_rhs;
+
+      LLVMTypeRef conc_elem_type    = LLVMGetElementType(array_type_lhs);
+      LLVMTypeRef conc_vector_type  = LLVMArrayType(conc_elem_type, conc_size);
+
+      LLVMValueRef conc_vector_base_address = LLVMBuildAlloca(builder, conc_vector_type, "");
+
+      unsigned i = 0;
+      LLVMValueRef vect_load;
+      unsigned index_load;
+      unsigned rhs_index = -1;
+      while(i < conc_size) 
+      {
+        if(i < size_lhs) {
+          vect_load  = lhs;
+          index_load = i;
+        } else {
+          ++rhs_index;
+          vect_load  = rhs;
+          index_load = rhs_index;   
+        }
+        // setup the load from one of the old vector
+        LLVMValueRef offset_load = LLVMBuildStructGEP(builder, vect_load, index_load, "");
+        LLVMValueRef val_to_store = LLVMBuildLoad(builder, offset_load, "");
+        
+        // compute the offset to store
+        LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), i, 0) };
+        // compute the offset where the i-th value has to be stored
+        LLVMValueRef offset_store = LLVMBuildInBoundsGEP2(builder, conc_elem_type, conc_vector_base_address, idxs, 1, "");
+        // store element i at address: vector_base_address + offset
+        LLVMBuildStore(builder, val_to_store, offset_store);
+        ++i;
+      }
+      return conc_vector_base_address;
+    }
+
     else // "standard" binary operation
     {
       LLVMValueRef lhs = codegen_expr(e->binop.lhs, env, module, builder);

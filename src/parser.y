@@ -28,12 +28,12 @@
 %token WHILE_KW DO_KW
 // BOOLEAN BINOP
 %token AND_SC AND OR_SC OR
-// VECT OPs
-%token CONS
 // EXPRESSION SEQUENCING
 %token SEQ_KW
 // SUGARED VECTOR CONSTRUCTION
 %token TIMES_KW
+// VECT OPs
+%token CONCAT_KW
 
 // DEFINE TOKEN TYPES
 %type <e> expr
@@ -50,6 +50,7 @@
 
 %nonassoc ASSIGN_OP
 %nonassoc IDENTIFIER
+%left CONCAT_KW
 %left AND_SC AND OR_SC OR
 %nonassoc '<' '>' LE GE '=' NE TIMES_KW
 %left '+' '-'
@@ -106,7 +107,7 @@ expr: VAL         { $$ = make_val($1); }
     | expr '[' expr ']'                   { $$ = make_vect_access_op($1, $3); }
     | expr '[' expr ']' ASSIGN_OP expr    { $$ = make_vect_update_op($1, $3, $6); }
 
-    | expr CONS '[' vect_elem ']'         { $$ = make_vect(make_expr_vect($1, $4)); }
+    | expr CONCAT_KW expr                 { $$ = make_bin_op($1, CONCAT_KW, $3); }
 
     | SEQ_KW expr_sequence                { $$ = make_seq($2); }
 
