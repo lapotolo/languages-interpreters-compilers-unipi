@@ -18,7 +18,7 @@ false                   return LIT_FALSE;
 seq                     return SEQ_KW;
 times                   return TIMES_KW;
 \+\+                    return CONCAT_KW;
-
+mod                     return MOD;
 [A-Za-z_][A-Za-z_0-9]*  { yylval.ident = strdup(yytext); return IDENTIFIER; }
 [0-9]+                  { yylval.lit_value = atoi(yytext); return VAL; }
 

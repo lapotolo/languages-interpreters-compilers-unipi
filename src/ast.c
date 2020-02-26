@@ -538,29 +538,20 @@ LLVMValueRef codegen_expr(
       LLVMTypeRef array_type_rhs = LLVMGetElementType(LLVMTypeOf(rhs));
       unsigned size_rhs = LLVMGetArrayLength(array_type_rhs);
 
-      unsigned conc_size = size_lhs + size_rhs;
+      unsigned size_conc = size_lhs + size_rhs;
 
       LLVMTypeRef conc_elem_type    = LLVMGetElementType(array_type_lhs);
-      LLVMTypeRef conc_vector_type  = LLVMArrayType(conc_elem_type, conc_size);
+      LLVMTypeRef conc_vector_type  = LLVMArrayType(conc_elem_type, size_conc);
 
       LLVMValueRef conc_vector_base_address = LLVMBuildAlloca(builder, conc_vector_type, "");
 
       unsigned i = 0;
-      LLVMValueRef vect_load;
-      unsigned index_load;
-      unsigned rhs_index = -1;
-      while(i < conc_size) 
+      unsigned index_load = 0;
+      // copy from lhs to the concatenated vector
+      while(i < size_lhs) 
       {
-        if(i < size_lhs) {
-          vect_load  = lhs;
-          index_load = i;
-        } else {
-          ++rhs_index;
-          vect_load  = rhs;
-          index_load = rhs_index;   
-        }
         // setup the load from one of the old vector
-        LLVMValueRef offset_load = LLVMBuildStructGEP(builder, vect_load, index_load, "");
+        LLVMValueRef offset_load = LLVMBuildStructGEP(builder, lhs, index_load, "");
         LLVMValueRef val_to_store = LLVMBuildLoad(builder, offset_load, "");
         
         // compute the offset to store
@@ -569,6 +560,24 @@ LLVMValueRef codegen_expr(
         LLVMValueRef offset_store = LLVMBuildInBoundsGEP2(builder, conc_elem_type, conc_vector_base_address, idxs, 1, "");
         // store element i at address: vector_base_address + offset
         LLVMBuildStore(builder, val_to_store, offset_store);
+        ++index_load;
+        ++i;
+      }
+      index_load = 0;
+      // copy from rhs to the concatenated vector
+      while(i < size_conc) 
+      {
+        // setup the load from one of the old vector
+        LLVMValueRef offset_load = LLVMBuildStructGEP(builder, rhs, index_load, "");
+        LLVMValueRef val_to_store = LLVMBuildLoad(builder, offset_load, "");
+        
+        // compute the offset to store
+        LLVMValueRef idxs[] = { LLVMConstInt(LLVMInt32Type(), i, 0) };
+        // compute the offset where the i-th value has to be stored
+        LLVMValueRef offset_store = LLVMBuildInBoundsGEP2(builder, conc_elem_type, conc_vector_base_address, idxs, 1, "");
+        // store element i at address: vector_base_address + offset
+        LLVMBuildStore(builder, val_to_store, offset_store);
+        ++index_load;
         ++i;
       }
       return conc_vector_base_address;
@@ -584,6 +593,7 @@ LLVMValueRef codegen_expr(
       case '-': return LLVMBuildSub(builder, lhs, rhs, "");
       case '*': return LLVMBuildMul(builder, lhs, rhs, "");
       case '/': return LLVMBuildSDiv(builder, lhs, rhs, "");
+      case MOD: return LLVMBuildURem(builder, lhs, rhs, "");
       case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "");
       case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "");
       case LE : return LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "");

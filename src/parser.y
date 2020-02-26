@@ -34,6 +34,8 @@
 %token TIMES_KW
 // VECT OPs
 %token CONCAT_KW
+// OTHER OPS
+%token MOD
 
 // DEFINE TOKEN TYPES
 %type <e> expr
@@ -50,7 +52,7 @@
 
 %nonassoc ASSIGN_OP
 %nonassoc IDENTIFIER
-%left CONCAT_KW
+%left CONCAT_KW MOD
 %left AND_SC AND OR_SC OR
 %nonassoc '<' '>' LE GE '=' NE TIMES_KW
 %left '+' '-'
@@ -88,6 +90,7 @@ expr: VAL         { $$ = make_val($1); }
     | expr '*' expr     { $$ = make_bin_op($1, '*', $3); }
     | expr '-' expr     { $$ = make_bin_op($1, '-', $3); }
     | expr '/' expr     { $$ = make_bin_op($1, '/', $3); }
+    | expr MOD expr     { $$ = make_bin_op($1, MOD, $3); }
 
     | expr '<' expr     { $$ = make_bin_op($1, '<', $3); }
     | expr '>' expr     { $$ = make_bin_op($1, '>', $3); }
