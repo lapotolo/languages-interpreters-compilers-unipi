@@ -476,7 +476,7 @@ LLVMValueRef codegen_expr(
 
       // in the case left is true we need to evaluate the right hand side
       LLVMPositionBuilderAtEnd(builder, left_true_bb);
-      LLVMValueRef right_val = codegen_expr(e->binop.rhs, env, module, builder);
+      LLVMValueRef right_val = LLVMBuildAnd(builder, left_val, codegen_expr(e->binop.rhs, env, module, builder), "");
       LLVMBuildBr(builder, cont_bb);
       left_true_bb = LLVMGetInsertBlock(builder);
 
@@ -509,7 +509,7 @@ LLVMValueRef codegen_expr(
       LLVMBuildCondBr(builder, left_val, left_true_bb, left_false_bb);
   
       LLVMPositionBuilderAtEnd(builder, left_false_bb);
-      LLVMValueRef right_val = codegen_expr(e->binop.rhs, env, module, builder);
+      LLVMValueRef right_val = LLVMBuildOr(builder, left_val, codegen_expr(e->binop.rhs, env, module, builder), "");
       LLVMBuildBr(builder, cont_bb);
       left_false_bb = LLVMGetInsertBlock(builder);
 
