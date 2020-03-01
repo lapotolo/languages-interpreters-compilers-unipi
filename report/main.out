@@ -1,0 +1,7 @@
+\BOOKMARK [1][-]{section.1}{Introduction to the new constructs}{}% 1
+\BOOKMARK [1][-]{section.2}{Scanner}{}% 2
+\BOOKMARK [1][-]{section.3}{Parser}{}% 3
+\BOOKMARK [1][-]{section.4}{Code Generation}{}% 4
+\BOOKMARK [1][-]{section.5}{An example Program}{}% 5
+\BOOKMARK [2][-]{subsection.5.1}{Computation of the n-th Fibonacci number}{section.5}% 6
+\BOOKMARK [1][-]{section.6}{Optimization and static analysis}{}% 7

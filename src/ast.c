@@ -474,7 +474,7 @@ LLVMValueRef codegen_expr(
       // left_true and left_false as possible successors blocks
       LLVMBuildCondBr(builder, left_val, left_true_bb, left_false_bb);
 
-      // in the case left is true it is left to evaluate the right hand side
+      // in the case left is true we need to evaluate the right hand side
       LLVMPositionBuilderAtEnd(builder, left_true_bb);
       LLVMValueRef right_val = codegen_expr(e->binop.rhs, env, module, builder);
       LLVMBuildBr(builder, cont_bb);
@@ -761,14 +761,23 @@ void jit_eval(struct expr *expr)
 
   // NEW
   // Setup optimizations using a pass manager
-  LLVMPassManagerRef pass_manager = LLVMCreateFunctionPassManagerForModule(module);
-  LLVMAddPromoteMemoryToRegisterPass(pass_manager);
-  //LLVMAddInstructionCombiningPass(pass_manager);
-  LLVMInitializeFunctionPassManager(pass_manager);;
   
-  //LLVMAddReassociatePass(pass_manager);
-  //LLVMAddGVNPass(pass_manager);
-  //LLVMAddCFGSimplificationPass(pass_manager);
+  LLVMPassManagerRef pass_manager = LLVMCreateFunctionPassManagerForModule(module);
+  
+  // Do simple "peephole" optimizations and bit-twiddling opti.
+  // LLVMAddInstructionCombiningPass(pass_manager);
+  
+  // Reassociate expressions.
+  // LLVMAddReassociatePass(pass_manager);
+  
+  // Eliminate Common SubExpressions.
+  // LLVMAddGVNPass(pass_manager);
+  
+  // Simplify the control flow graph (deleting unreachable blocks, etc).
+  LLVMAddCFGSimplificationPass(pass_manager);
+
+  //LLVMAddPromoteMemoryToRegisterPass(pass_manager);
+  LLVMInitializeFunctionPassManager(pass_manager);;
   
   char *error;
   if (LLVMCreateExecutionEngineForModule(&engine, module, &error)) {
@@ -783,7 +792,6 @@ void jit_eval(struct expr *expr)
 
   // visit expression to get its LLVM type
   LLVMTypeRef bad_f_type = LLVMFunctionType(LLVMVoidType(), NULL, 0, 0);
-
   LLVMValueRef typing_f = LLVMAddFunction(module, "typing_f", bad_f_type);
   
   LLVMBasicBlockRef typing_entry_bb = LLVMAppendBasicBlock(typing_f, "entry");
@@ -796,7 +804,7 @@ void jit_eval(struct expr *expr)
 
   // emit expression as function body
   LLVMTypeRef actual_f_type = LLVMFunctionType(type, NULL, 0, 0);
-  LLVMValueRef f = LLVMAddFunction(module, "f", actual_f_type);
+  LLVMValueRef f = LLVMAddFunction(module, "main", actual_f_type);
   LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(f, "entry");
   LLVMPositionBuilderAtEnd(builder, entry_bb);
   LLVMValueRef ret = codegen_expr(expr, NULL, module, builder);

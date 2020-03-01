@@ -1,0 +1,11 @@
+var n = 10 in
+var c = 1 in
+var b = 0 in
+var a = 0 in
+seq
+  while a < n do
+    seq
+      b:= a+1;
+      c:=c+b;
+      a:= b*2.;
+  c.

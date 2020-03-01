@@ -8,4 +8,4 @@ var x = [0] times n in
       seq
         x[i] := x[i-1] + x[i-2];
         i := i+1.;
-    x[9].
+    x[n-1].
